@@ -1,0 +1,15 @@
+# PX4 params to make TELEM2 (/dev/ttyS4 on mr-tropic) a MAVLink instance that
+# forwards to/from the USB/GCS link, matched to the Nucleo's 57600 8N1 no-flow.
+# Paste these into the PX4 MAVLink shell (Tools/mavlink_shell.py) in order.
+#
+# Instance 1 = TELEM2. mr-tropic's rc.board_mavlink is an empty stub, so no
+# conflict. Do NOT touch MAV_0_* (that's TELEM1). USB/GCS instance is automatic.
+
+param set MAV_1_CONFIG 102     # 102 = TELEM2 -> /dev/ttyS4
+param set SER_TEL2_BAUD 57600  # match the Nucleo
+param set MAV_1_MODE 2         # Onboard
+param set MAV_1_FORWARD 1      # REQUIRED: forward between TELEM2 and USB (default off)
+param set MAV_1_FLOW_CTRL 0    # force flow control OFF (3-wire link)
+param set MAV_1_RATE 0         # auto rate
+param save
+reboot

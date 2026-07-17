@@ -1,0 +1,4 @@
+host/military_dialect.py
+host/__pycache__/
+build/
+*.bin
