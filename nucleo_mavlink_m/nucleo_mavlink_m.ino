@@ -1,11 +1,14 @@
-// Nucleo-F103RB MAVLink peripheral, military dialect.
+// Nucleo-F103RB MAVLink peripheral, MAVLink-M dialect.
 //
 // Stands in for a MAVLink component (an ESAD / munition device) so we can verify
-// that PX4 can exchange common + military-dialect messages with real hardware.
+// that PX4 can exchange common + MAVLink-M messages with real hardware. The
+// dialect here is the full MAVLink-M spec (mavlink-military was replaced by it),
+// so the ESAD messages carry the new IDs (ESAD_STATE 53030, ESAD_ARMING 53031)
+// and the MAVLINK_M_ESAD_* enum names.
 //
 // Behaviour:
 //   - Emits HEARTBEAT at 1 Hz  (common dialect, proves the TX path + link).
-//   - On receiving ESAD_ARMING (military), replies with ESAD_STATE (military),
+//   - On receiving ESAD_ARMING (MAVLink-M), replies with ESAD_STATE (MAVLink-M),
 //     echoing the arming request back as the new arming_status.
 //   - LD2 (green, PA5) solid on when armed, off when disarmed.
 //
@@ -41,7 +44,7 @@ static const uint8_t COMP_ID = 190;  // arming/payload component slot
 static const uint8_t LED = LED_BUILTIN;
 
 // Mirror of the last arming request we were told to apply.
-static uint8_t g_arming_status = ESAD_ARMING_DISARMED;
+static uint8_t g_arming_status = MAVLINK_M_ESAD_ARMING_DISARMED;
 
 static void send_heartbeat()
 {
@@ -66,19 +69,28 @@ static void send_esad_state()
 	mavlink_message_t msg;
 	uint8_t buf[MAVLINK_MAX_PACKET_LEN];
 	const uint8_t sw_hash[8] = { 'n','u','c','1','0','3','r','b' };
+	// No engagement association on this demo payload: all-zero track UID.
+	const uint8_t track_uid[16] = { 0 };
 
 	mavlink_msg_esad_state_pack(
 		SYS_ID, COMP_ID, &msg,
-		(uint64_t)micros(),     // time_usec (board-relative, no RTC)
-		0,                      // arming_challenge_hash
-		0,                      // fault_flags
-		0.0f,                   // input_1
-		0.0f,                   // input_2
-		sw_hash,                // sw_version_hash[8]
-		g_arming_status,        // arming_status  <- echoes the request
-		ESAD_MUNITION_PRESENT,  // munition_status
-		ESAD_IGNITION_OPEN,     // ignition_status
-		0);                     // munition_type
+		(uint64_t)micros(),               // time_usec (board-relative, no RTC)
+		1,                                // esad_id (instance 1; 0 is invalid for ESAD_STATE)
+		0,                                // arming_challenge_hash
+		0,                                // fault_flags
+		0.0f,                             // input_1
+		0.0f,                             // input_2
+		sw_hash,                          // sw_version_hash[8]
+		g_arming_status,                  // arming_status  <- echoes the request
+		MAVLINK_M_ESAD_MUNITION_PRESENT,  // munition_status
+		MAVLINK_M_ESAD_IGNITION_OPEN,     // ignition_status
+		0,                                // munition_type
+		0,                                // store_id (single store)
+		MAVLINK_M_ESAD_PIN_PRESENT,       // pin_state
+		MAVLINK_M_ESAD_ARM_DELAY_UNKNOWN, // arm_delay_setting
+		-1,                               // arm_delay_remaining_s (not counting)
+		MAVLINK_M_ESAD_TRIG_DIST_UNKNOWN, // trigger_distance_mode
+		track_uid);                       // track_uid[16] (all-zero, no track)
 
 	uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
 	FCLink.write(buf, len);
@@ -91,13 +103,21 @@ static void handle_message(const mavlink_message_t *msg)
 		mavlink_esad_arming_t in;
 		mavlink_msg_esad_arming_decode(msg, &in);
 
-		// arming_request: 0 = disarm, 1 = arm. Map straight to the state enum.
-		g_arming_status = in.arming_request ? ESAD_ARMING_ARMED
-		                                    : ESAD_ARMING_DISARMED;
+		// Only act on requests addressed to us: this instance (esad_id == 1) or
+		// the broadcast selector (esad_id == 0). The decode also yields store_id,
+		// which we ignore on this single-store demo payload.
+		if (in.esad_id != 0 && in.esad_id != 1) {
+			break;
+		}
+
+		// arming_request: 0 = disarm (MAVLINK_M_ESAD_REQUEST_DISARM),
+		// 1 = arm (MAVLINK_M_ESAD_REQUEST_ARM). Map straight to the state enum.
+		g_arming_status = in.arming_request ? MAVLINK_M_ESAD_ARMING_ARMED
+		                                    : MAVLINK_M_ESAD_ARMING_DISARMED;
 		send_esad_state();
 		// LD2 (green, PA5) tracks arming state: solid on when armed, off when
 		// disarmed. Single-color GPIO LED, no colour control on this board.
-		digitalWrite(LED, g_arming_status == ESAD_ARMING_ARMED ? HIGH : LOW);
+		digitalWrite(LED, g_arming_status == MAVLINK_M_ESAD_ARMING_ARMED ? HIGH : LOW);
 		DBG.print("ESAD_ARMING rx, request=");
 		DBG.print(in.arming_request);
 		DBG.println(" -> replied ESAD_STATE");

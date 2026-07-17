@@ -104,8 +104,10 @@ def main() -> int:
     print(f"sending ESAD_ARMING arming_request={args.arm} to payload...")
     m.mav.esad_arming_send(
         time_usec=int(time.time() * 1e6),
+        esad_id=1,          # target ESAD instance 1 (0 = all instances)
         arming_challenge_hash=0xDEADBEEF,
         arming_request=args.arm,
+        store_id=0,         # 0 = all stores / broadcast
     )
 
     # 4. Wait for the ESAD_STATE forwarded back from the payload.

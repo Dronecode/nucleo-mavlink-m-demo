@@ -67,7 +67,14 @@ src/modules/mavlink/mavlink/message_definitions/v1.0/military.xml
 ```
 
 It `<include>`s `common.xml`, so a firmware built with the military dialect ends
-up with **both** dialects — you do not lose the common messages.
+up with **both** dialects — you do not lose the common messages. `military.xml`
+is the full **MAVLink-M** spec — 26 messages in the 53000 block, not the earlier
+preliminary set.
+
+The repo also ships a `military_extensions.xml` template (a private-extension
+dialect, dialect 3, that `<include>`s `military.xml` and adds example messages in
+the 53900+ range). It is for vendor-private messages; the demo uses the standard
+military dialect and does not need it.
 
 There are two ways to get the file in place.
 

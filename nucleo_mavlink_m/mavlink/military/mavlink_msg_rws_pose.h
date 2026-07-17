@@ -1,7 +1,7 @@
 #pragma once
 // MESSAGE RWS_POSE PACKING
 
-#define MAVLINK_MSG_ID_RWS_POSE 53009
+#define MAVLINK_MSG_ID_RWS_POSE 53040
 
 
 typedef struct __mavlink_rws_pose_t {
@@ -12,12 +12,12 @@ typedef struct __mavlink_rws_pose_t {
  float vx; /*< [m/s] Velocity north component (NED). NaN if unknown.*/
  float vy; /*< [m/s] Velocity east component (NED). NaN if unknown.*/
  float vz; /*< [m/s] Velocity down component (NED). NaN if unknown.*/
- float cov_pos_x; /*< [m^2] Position covariance, north axis. NaN if unknown.*/
- float cov_pos_y; /*< [m^2] Position covariance, east axis. NaN if unknown.*/
- float cov_pos_z; /*< [m^2] Position covariance, down axis. NaN if unknown.*/
- float cov_vel_x; /*< [m^2/s^2] Velocity covariance, north axis. NaN if unknown.*/
- float cov_vel_y; /*< [m^2/s^2] Velocity covariance, east axis. NaN if unknown.*/
- float cov_vel_z; /*< [m^2/s^2] Velocity covariance, down axis. NaN if unknown.*/
+ float cov_pos_x; /*<  Position covariance, north axis (m^2). NaN if unknown.*/
+ float cov_pos_y; /*<  Position covariance, east axis (m^2). NaN if unknown.*/
+ float cov_pos_z; /*<  Position covariance, down axis (m^2). NaN if unknown.*/
+ float cov_vel_x; /*<  Velocity covariance, north axis (m^2/s^2). NaN if unknown.*/
+ float cov_vel_y; /*<  Velocity covariance, east axis (m^2/s^2). NaN if unknown.*/
+ float cov_vel_z; /*<  Velocity covariance, down axis (m^2/s^2). NaN if unknown.*/
  float offset_x; /*< [m] Mounting offset X from vehicle reference point in coordinate_frame.*/
  float offset_y; /*< [m] Mounting offset Y from vehicle reference point in coordinate_frame.*/
  float offset_z; /*< [m] Mounting offset Z from vehicle reference point in coordinate_frame.*/
@@ -30,17 +30,17 @@ typedef struct __mavlink_rws_pose_t {
 
 #define MAVLINK_MSG_ID_RWS_POSE_LEN 97
 #define MAVLINK_MSG_ID_RWS_POSE_MIN_LEN 97
-#define MAVLINK_MSG_ID_53009_LEN 97
-#define MAVLINK_MSG_ID_53009_MIN_LEN 97
+#define MAVLINK_MSG_ID_53040_LEN 97
+#define MAVLINK_MSG_ID_53040_MIN_LEN 97
 
 #define MAVLINK_MSG_ID_RWS_POSE_CRC 107
-#define MAVLINK_MSG_ID_53009_CRC 107
+#define MAVLINK_MSG_ID_53040_CRC 107
 
 #define MAVLINK_MSG_RWS_POSE_FIELD_Q_LEN 4
 
 #if MAVLINK_COMMAND_24BIT
 #define MAVLINK_MESSAGE_INFO_RWS_POSE { \
-    53009, \
+    53040, \
     "RWS_POSE", \
     21, \
     {  { "time_usec", NULL, MAVLINK_TYPE_UINT64_T, 0, 0, offsetof(mavlink_rws_pose_t, time_usec) }, \
@@ -108,12 +108,12 @@ typedef struct __mavlink_rws_pose_t {
  * @param vx [m/s] Velocity north component (NED). NaN if unknown.
  * @param vy [m/s] Velocity east component (NED). NaN if unknown.
  * @param vz [m/s] Velocity down component (NED). NaN if unknown.
- * @param cov_pos_x [m^2] Position covariance, north axis. NaN if unknown.
- * @param cov_pos_y [m^2] Position covariance, east axis. NaN if unknown.
- * @param cov_pos_z [m^2] Position covariance, down axis. NaN if unknown.
- * @param cov_vel_x [m^2/s^2] Velocity covariance, north axis. NaN if unknown.
- * @param cov_vel_y [m^2/s^2] Velocity covariance, east axis. NaN if unknown.
- * @param cov_vel_z [m^2/s^2] Velocity covariance, down axis. NaN if unknown.
+ * @param cov_pos_x  Position covariance, north axis (m^2). NaN if unknown.
+ * @param cov_pos_y  Position covariance, east axis (m^2). NaN if unknown.
+ * @param cov_pos_z  Position covariance, down axis (m^2). NaN if unknown.
+ * @param cov_vel_x  Velocity covariance, north axis (m^2/s^2). NaN if unknown.
+ * @param cov_vel_y  Velocity covariance, east axis (m^2/s^2). NaN if unknown.
+ * @param cov_vel_z  Velocity covariance, down axis (m^2/s^2). NaN if unknown.
  * @param offset_x [m] Mounting offset X from vehicle reference point in coordinate_frame.
  * @param offset_y [m] Mounting offset Y from vehicle reference point in coordinate_frame.
  * @param offset_z [m] Mounting offset Z from vehicle reference point in coordinate_frame.
@@ -195,12 +195,12 @@ static inline uint16_t mavlink_msg_rws_pose_pack(uint8_t system_id, uint8_t comp
  * @param vx [m/s] Velocity north component (NED). NaN if unknown.
  * @param vy [m/s] Velocity east component (NED). NaN if unknown.
  * @param vz [m/s] Velocity down component (NED). NaN if unknown.
- * @param cov_pos_x [m^2] Position covariance, north axis. NaN if unknown.
- * @param cov_pos_y [m^2] Position covariance, east axis. NaN if unknown.
- * @param cov_pos_z [m^2] Position covariance, down axis. NaN if unknown.
- * @param cov_vel_x [m^2/s^2] Velocity covariance, north axis. NaN if unknown.
- * @param cov_vel_y [m^2/s^2] Velocity covariance, east axis. NaN if unknown.
- * @param cov_vel_z [m^2/s^2] Velocity covariance, down axis. NaN if unknown.
+ * @param cov_pos_x  Position covariance, north axis (m^2). NaN if unknown.
+ * @param cov_pos_y  Position covariance, east axis (m^2). NaN if unknown.
+ * @param cov_pos_z  Position covariance, down axis (m^2). NaN if unknown.
+ * @param cov_vel_x  Velocity covariance, north axis (m^2/s^2). NaN if unknown.
+ * @param cov_vel_y  Velocity covariance, east axis (m^2/s^2). NaN if unknown.
+ * @param cov_vel_z  Velocity covariance, down axis (m^2/s^2). NaN if unknown.
  * @param offset_x [m] Mounting offset X from vehicle reference point in coordinate_frame.
  * @param offset_y [m] Mounting offset Y from vehicle reference point in coordinate_frame.
  * @param offset_z [m] Mounting offset Z from vehicle reference point in coordinate_frame.
@@ -285,12 +285,12 @@ static inline uint16_t mavlink_msg_rws_pose_pack_status(uint8_t system_id, uint8
  * @param vx [m/s] Velocity north component (NED). NaN if unknown.
  * @param vy [m/s] Velocity east component (NED). NaN if unknown.
  * @param vz [m/s] Velocity down component (NED). NaN if unknown.
- * @param cov_pos_x [m^2] Position covariance, north axis. NaN if unknown.
- * @param cov_pos_y [m^2] Position covariance, east axis. NaN if unknown.
- * @param cov_pos_z [m^2] Position covariance, down axis. NaN if unknown.
- * @param cov_vel_x [m^2/s^2] Velocity covariance, north axis. NaN if unknown.
- * @param cov_vel_y [m^2/s^2] Velocity covariance, east axis. NaN if unknown.
- * @param cov_vel_z [m^2/s^2] Velocity covariance, down axis. NaN if unknown.
+ * @param cov_pos_x  Position covariance, north axis (m^2). NaN if unknown.
+ * @param cov_pos_y  Position covariance, east axis (m^2). NaN if unknown.
+ * @param cov_pos_z  Position covariance, down axis (m^2). NaN if unknown.
+ * @param cov_vel_x  Velocity covariance, north axis (m^2/s^2). NaN if unknown.
+ * @param cov_vel_y  Velocity covariance, east axis (m^2/s^2). NaN if unknown.
+ * @param cov_vel_z  Velocity covariance, down axis (m^2/s^2). NaN if unknown.
  * @param offset_x [m] Mounting offset X from vehicle reference point in coordinate_frame.
  * @param offset_y [m] Mounting offset Y from vehicle reference point in coordinate_frame.
  * @param offset_z [m] Mounting offset Z from vehicle reference point in coordinate_frame.
@@ -411,12 +411,12 @@ static inline uint16_t mavlink_msg_rws_pose_encode_status(uint8_t system_id, uin
  * @param vx [m/s] Velocity north component (NED). NaN if unknown.
  * @param vy [m/s] Velocity east component (NED). NaN if unknown.
  * @param vz [m/s] Velocity down component (NED). NaN if unknown.
- * @param cov_pos_x [m^2] Position covariance, north axis. NaN if unknown.
- * @param cov_pos_y [m^2] Position covariance, east axis. NaN if unknown.
- * @param cov_pos_z [m^2] Position covariance, down axis. NaN if unknown.
- * @param cov_vel_x [m^2/s^2] Velocity covariance, north axis. NaN if unknown.
- * @param cov_vel_y [m^2/s^2] Velocity covariance, east axis. NaN if unknown.
- * @param cov_vel_z [m^2/s^2] Velocity covariance, down axis. NaN if unknown.
+ * @param cov_pos_x  Position covariance, north axis (m^2). NaN if unknown.
+ * @param cov_pos_y  Position covariance, east axis (m^2). NaN if unknown.
+ * @param cov_pos_z  Position covariance, down axis (m^2). NaN if unknown.
+ * @param cov_vel_x  Velocity covariance, north axis (m^2/s^2). NaN if unknown.
+ * @param cov_vel_y  Velocity covariance, east axis (m^2/s^2). NaN if unknown.
+ * @param cov_vel_z  Velocity covariance, down axis (m^2/s^2). NaN if unknown.
  * @param offset_x [m] Mounting offset X from vehicle reference point in coordinate_frame.
  * @param offset_y [m] Mounting offset Y from vehicle reference point in coordinate_frame.
  * @param offset_z [m] Mounting offset Z from vehicle reference point in coordinate_frame.
@@ -635,7 +635,7 @@ static inline float mavlink_msg_rws_pose_get_vz(const mavlink_message_t* msg)
 /**
  * @brief Get field cov_pos_x from rws_pose message
  *
- * @return [m^2] Position covariance, north axis. NaN if unknown.
+ * @return  Position covariance, north axis (m^2). NaN if unknown.
  */
 static inline float mavlink_msg_rws_pose_get_cov_pos_x(const mavlink_message_t* msg)
 {
@@ -645,7 +645,7 @@ static inline float mavlink_msg_rws_pose_get_cov_pos_x(const mavlink_message_t* 
 /**
  * @brief Get field cov_pos_y from rws_pose message
  *
- * @return [m^2] Position covariance, east axis. NaN if unknown.
+ * @return  Position covariance, east axis (m^2). NaN if unknown.
  */
 static inline float mavlink_msg_rws_pose_get_cov_pos_y(const mavlink_message_t* msg)
 {
@@ -655,7 +655,7 @@ static inline float mavlink_msg_rws_pose_get_cov_pos_y(const mavlink_message_t* 
 /**
  * @brief Get field cov_pos_z from rws_pose message
  *
- * @return [m^2] Position covariance, down axis. NaN if unknown.
+ * @return  Position covariance, down axis (m^2). NaN if unknown.
  */
 static inline float mavlink_msg_rws_pose_get_cov_pos_z(const mavlink_message_t* msg)
 {
@@ -665,7 +665,7 @@ static inline float mavlink_msg_rws_pose_get_cov_pos_z(const mavlink_message_t* 
 /**
  * @brief Get field cov_vel_x from rws_pose message
  *
- * @return [m^2/s^2] Velocity covariance, north axis. NaN if unknown.
+ * @return  Velocity covariance, north axis (m^2/s^2). NaN if unknown.
  */
 static inline float mavlink_msg_rws_pose_get_cov_vel_x(const mavlink_message_t* msg)
 {
@@ -675,7 +675,7 @@ static inline float mavlink_msg_rws_pose_get_cov_vel_x(const mavlink_message_t* 
 /**
  * @brief Get field cov_vel_y from rws_pose message
  *
- * @return [m^2/s^2] Velocity covariance, east axis. NaN if unknown.
+ * @return  Velocity covariance, east axis (m^2/s^2). NaN if unknown.
  */
 static inline float mavlink_msg_rws_pose_get_cov_vel_y(const mavlink_message_t* msg)
 {
@@ -685,7 +685,7 @@ static inline float mavlink_msg_rws_pose_get_cov_vel_y(const mavlink_message_t* 
 /**
  * @brief Get field cov_vel_z from rws_pose message
  *
- * @return [m^2/s^2] Velocity covariance, down axis. NaN if unknown.
+ * @return  Velocity covariance, down axis (m^2/s^2). NaN if unknown.
  */
 static inline float mavlink_msg_rws_pose_get_cov_vel_z(const mavlink_message_t* msg)
 {

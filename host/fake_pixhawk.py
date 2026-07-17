@@ -58,8 +58,10 @@ def main() -> int:
     print(f"sending ESAD_ARMING arming_request={args.arm} (military)...")
     m.mav.esad_arming_send(
         time_usec=int(time.time() * 1e6),
+        esad_id=1,          # target ESAD instance 1 (0 = all instances)
         arming_challenge_hash=0xDEADBEEF,
         arming_request=args.arm,
+        store_id=0,         # 0 = all stores / broadcast
     )
 
     print("waiting for ESAD_STATE reply (military)...")

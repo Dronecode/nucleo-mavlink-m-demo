@@ -5,9 +5,15 @@ The wire protocol is MAVLink 2.0. The Nucleo speaks the `common` dialect (for
 [Dronecode/mavlink-military](https://github.com/Dronecode/mavlink-military), of
 which it uses exactly two messages: `ESAD_ARMING` (RX) and `ESAD_STATE` (TX).
 
-The full military dialect (`military.xml`) defines the 53000-block messages
-(target sets, fires, BDA, ESAD, RWS). This project exercises only the ESAD pair;
-the rest ride along in the compiled dialect but are unused here.
+The dialect is now the full **MAVLink-M** spec (`military.xml`): 26 messages in
+the 53000 block (track identity, target sets, fires, BDA, ESAD, stores, RWS,
+CAS/9-line, and more). This project exercises only the ESAD pair; the rest ride
+along in the compiled dialect but are unused here.
+
+The repo also carries a `military_extensions.xml` template (a private-extension
+dialect that `<include>`s `military.xml`, dialect 3, with example messages in the
+53900+ range). It is for vendor-private messages; **the demo uses the standard
+military dialect and does not need it.**
 
 ## Identity
 
@@ -22,22 +28,27 @@ system 1. That way PX4 treats it as a distinct node to forward, rather than
 mistaking it for one of its own components. It emits `HEARTBEAT` at 1 Hz with
 `MAV_TYPE_GENERIC` / `MAV_AUTOPILOT_INVALID` and `MAV_STATE_ACTIVE`.
 
-## ESAD_ARMING — 53008 (host → Nucleo)
+## ESAD_ARMING — 53031 (host → Nucleo)
 
 The arming command. The firmware decodes it and acts on `arming_request`.
 
 | Field                   | Type     | Meaning                                             |
 |-------------------------|----------|-----------------------------------------------------|
 | `time_usec`             | uint64_t | Timestamp (UNIX epoch µs UTC).                      |
-| `arming_challenge_hash` | uint32_t | Challenge hash matching the active `ESAD_STATE` hash. |
+| `arming_challenge_hash` | uint32_t | Challenge hash matching the selected ESAD instance's challenge. For `esad_id = 0`, the same hash must be active on every targeted ESAD. |
+| `esad_id`               | uint8_t  | Vehicle-local ESAD instance to arm/disarm. 0 = all instances selected by `store_id`, 1-254 = specific instance, 255 = reserved. |
 | `arming_request`        | uint8_t  | Requested state, enum `ESAD_ARMING_REQUEST`.        |
+| `store_id`              | uint8_t  | Target store instance. 0 = all stores / broadcast.  |
 
-`ESAD_ARMING_REQUEST`:
+The host scripts send `esad_id=1` (a specific instance) and `store_id=0`.
 
-| Value | Name                  |
-|-------|-----------------------|
-| 0     | `ESAD_REQUEST_DISARM` |
-| 1     | `ESAD_REQUEST_ARM`    |
+`ESAD_ARMING_REQUEST` (entry names carry the `MAVLINK_M_` prefix in the full
+dialect):
+
+| Value | Name                             |
+|-------|----------------------------------|
+| 0     | `MAVLINK_M_ESAD_REQUEST_DISARM`  |
+| 1     | `MAVLINK_M_ESAD_REQUEST_ARM`     |
 
 > The dialect spec says the `arming_challenge_hash` must match the value last
 > broadcast in `ESAD_STATE` before a request is accepted. **This demo firmware
@@ -50,23 +61,37 @@ The arming command. The firmware decodes it and acts on `arming_request`.
 broadcast. In topology B, PX4 forwards it out TELEM2 because `MAV_1_FORWARD=1`,
 not because of any address-based routing.
 
-## ESAD_STATE — 53007 (Nucleo → host)
+## ESAD_STATE — 53030 (Nucleo → host)
 
 The telemetry reply. The firmware sends one immediately on receiving
 `ESAD_ARMING`, with `arming_status` echoing the request.
 
-| Field                   | Type       | Firmware value                                  |
-|-------------------------|------------|-------------------------------------------------|
-| `time_usec`             | uint64_t   | `micros()` — board uptime, **not** wall-clock (no RTC). |
-| `arming_challenge_hash` | uint32_t   | 0                                               |
-| `fault_flags`           | uint32_t   | 0 (enum `ESAD_FAULT_FLAGS` bitmask, no faults). |
-| `input_1`               | float      | 0.0                                             |
-| `input_2`               | float      | 0.0                                             |
-| `sw_version_hash`       | uint8_t[8] | `"nuc103rb"` (8 ASCII bytes, board build tag).  |
-| `arming_status`         | uint8_t    | echoes the request → enum `ESAD_ARMING_STATUS`. |
-| `munition_status`       | uint8_t    | `ESAD_MUNITION_PRESENT` (1).                    |
-| `ignition_status`       | uint8_t    | `ESAD_IGNITION_OPEN` (0).                       |
-| `munition_type`         | uint8_t    | 0                                               |
+The MAVLink-M `ESAD_STATE` carries the full store/ESAD status set below. The
+demo firmware populates only the original core fields; the fields added by the
+full spec (`esad_id`, `store_id`, `pin_state`, `arm_delay_setting`,
+`arm_delay_remaining_s`, `trigger_distance_mode`, `track_uid`) ride along at
+their defaults and are not exercised here. The host only reads `arming_status`
+(both scripts) plus `munition_status` and `sw_version_hash` (`fake_pixhawk.py`).
+
+| Field                   | Type        | Firmware value                                  |
+|-------------------------|-------------|-------------------------------------------------|
+| `time_usec`             | uint64_t    | `micros()` — board uptime, **not** wall-clock (no RTC). |
+| `esad_id`               | uint8_t     | ESAD instance id (1-254). *Full-spec field, default.* |
+| `arming_challenge_hash` | uint32_t    | 0                                               |
+| `fault_flags`           | uint32_t    | 0 (enum `ESAD_FAULT_FLAGS` bitmask, no faults). |
+| `input_1`               | float       | 0.0                                             |
+| `input_2`               | float       | 0.0                                             |
+| `sw_version_hash`       | uint8_t[8]  | `"nuc103rb"` (8 ASCII bytes, board build tag).  |
+| `arming_status`         | uint8_t     | echoes the request → enum `ESAD_ARMING_STATUS`. |
+| `munition_status`       | uint8_t     | `ESAD_MUNITION_PRESENT` (1).                    |
+| `ignition_status`       | uint8_t     | `ESAD_IGNITION_OPEN` (0).                       |
+| `munition_type`         | uint8_t     | 0                                               |
+| `store_id`              | uint8_t     | Store instance id. *Full-spec field, default.*  |
+| `pin_state`             | uint8_t     | Safety pull-pin state. *Full-spec field, default.* |
+| `arm_delay_setting`     | uint8_t     | Arming-delay switch position. *Full-spec field, default.* |
+| `arm_delay_remaining_s` | int16_t     | Arming-delay countdown (s), -1 = n/a. *Full-spec field, default.* |
+| `trigger_distance_mode` | uint8_t     | Trigger-distance standoff mode. *Full-spec field, default.* |
+| `track_uid`             | uint8_t[16] | Engagement track UID, all-zero if none. *Full-spec field, default.* |
 
 Because `time_usec` is board uptime rather than wall-clock, the host cannot gate
 replies on a wall-clock timestamp. `gcs_via_px4.py` instead drains any buffered
@@ -75,41 +100,41 @@ genuinely the response to that request.
 
 ### Enums in ESAD_STATE
 
+All enum entry names below carry the `MAVLINK_M_` prefix in the full dialect.
+
 `ESAD_ARMING_STATUS`:
 
-| Value | Name                   |
-|-------|------------------------|
-| 0     | `ESAD_ARMING_DISARMED` |
-| 1     | `ESAD_ARMING_ARMED`    |
-| 2     | `ESAD_ARMING_FAULT`    |
+| Value | Name                              |
+|-------|-----------------------------------|
+| 0     | `MAVLINK_M_ESAD_ARMING_DISARMED`  |
+| 1     | `MAVLINK_M_ESAD_ARMING_ARMED`     |
+| 2     | `MAVLINK_M_ESAD_ARMING_FAULT`     |
 
 `ESAD_MUNITION_STATUS`:
 
-| Value | Name                       |
-|-------|----------------------------|
-| 0     | `ESAD_MUNITION_NOT_PRESENT`|
-| 1     | `ESAD_MUNITION_PRESENT`    |
-| 2     | `ESAD_MUNITION_READY`      |
-| 3     | `ESAD_MUNITION_FAULT`      |
+| Value | Name                                  |
+|-------|---------------------------------------|
+| 0     | `MAVLINK_M_ESAD_MUNITION_NOT_PRESENT` |
+| 1     | `MAVLINK_M_ESAD_MUNITION_PRESENT`     |
+| 2     | `MAVLINK_M_ESAD_MUNITION_READY`       |
+| 3     | `MAVLINK_M_ESAD_MUNITION_FAULT`       |
 
 `ESAD_IGNITION_STATUS`:
 
-| Value | Name                    |
-|-------|-------------------------|
-| 0     | `ESAD_IGNITION_OPEN`    |
-| 1     | `ESAD_IGNITION_CLOSED`  |
-| 2     | `ESAD_IGNITION_FIRED`   |
-| 3     | `ESAD_IGNITION_FAULT`   |
+| Value | Name                               |
+|-------|------------------------------------|
+| 0     | `MAVLINK_M_ESAD_IGNITION_OPEN`     |
+| 1     | `MAVLINK_M_ESAD_IGNITION_CLOSED`   |
+| 2     | `MAVLINK_M_ESAD_IGNITION_FIRED`    |
+| 3     | `MAVLINK_M_ESAD_IGNITION_FAULT`    |
 
 `ESAD_FAULT_FLAGS` (bitmask, unused by this firmware — always 0):
 
-| Bit | Name                          |
-|-----|-------------------------------|
-| 1   | `ESAD_FAULT_WIRING`           |
-| 2   | `ESAD_FAULT_POWER_GLITCH`     |
-| 4   | `ESAD_FAULT_SIGNAL_INTEGRITY` |
-| 8   | `ESAD_FAULT_SENSOR_ACC`       |
-| 16  | `ESAD_FAULT_SENSOR_LIDAR`     |
+| Bit | Name                                    |
+|-----|-----------------------------------------|
+| 1   | `MAVLINK_M_ESAD_FAULT_WIRING`           |
+| 2   | `MAVLINK_M_ESAD_FAULT_POWER_GLITCH`     |
+| 4   | `MAVLINK_M_ESAD_FAULT_SIGNAL_INTEGRITY` |
 
 ## Arming request → status mapping
 
