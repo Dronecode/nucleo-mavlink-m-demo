@@ -33,10 +33,11 @@ Plus a common ground. Three wires total, no flow control.
 
 So:
 
-```
-  Nucleo PA9  (D8, TX) ------------> Tropic TELEM2 RX
-  Nucleo PA10 (D2, RX) <------------ Tropic TELEM2 TX
-  Nucleo GND           <----------->  Tropic TELEM2 GND
+```mermaid
+flowchart LR
+    n_tx["Nucleo PA9 (D8, TX)"] -->|USART1 TX| t_rx["Tropic TELEM2 RX"]
+    t_tx["Tropic TELEM2 TX"] -->|USART1 RX| n_rx["Nucleo PA10 (D2, RX)"]
+    n_gnd["Nucleo GND"] <-->|ground| t_gnd["Tropic TELEM2 GND"]
 ```
 
 Get the TX/RX crossing wrong and you get exactly the same symptom as the D0/D1

@@ -132,10 +132,13 @@ with no colour control on this board.
 
 Topology A (direct):
 
-```
-Nucleo --HEARTBEAT (1 Hz)------------------------> host
-host   --ESAD_ARMING (arming_request)-----------> Nucleo
-Nucleo --ESAD_STATE (arming_status echoes it)---> host
+```mermaid
+sequenceDiagram
+    participant host
+    participant Nucleo
+    Nucleo->>host: HEARTBEAT (1 Hz)
+    host->>Nucleo: ESAD_ARMING (arming_request)
+    Nucleo->>host: ESAD_STATE (arming_status echoes it)
 ```
 
 Topology B (through PX4) is identical on the wire; PX4 forwards each message in

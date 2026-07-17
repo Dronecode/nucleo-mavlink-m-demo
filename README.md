@@ -20,16 +20,20 @@ COM port. No PX4, no external wiring. This is the standalone bring-up mode: use
 it to confirm the sketch is alive and the military dialect works before adding
 PX4.
 
+```mermaid
+flowchart LR
+    Mac["Mac (pymavlink GCS)<br/>host/fake_pixhawk.py"]
+    Nucleo["Nucleo-F103RB (ESAD)<br/>sys=2 comp=190"]
+    Mac <-->|"USB / ST-Link VCP, 57600 8N1<br/>/dev/cu.usbmodem1103 &lt;-&gt; USART2 (PA2/PA3, Serial)"| Nucleo
 ```
-  Mac (pymavlink GCS)                       Nucleo-F103RB (ESAD)
-  host/fake_pixhawk.py                      sys=2  comp=190
-        |                                          |
-        |   USB / ST-Link VCP, 57600 8N1           |
-        |   /dev/cu.usbmodem1103  <-----> USART2 (PA2/PA3, Serial)
-        +------------------------------------------+
-        HEARTBEAT  ------------------------------->  (link + common dialect ok)
-        ESAD_ARMING (military) ------------------->
-                       <------------------------- ESAD_STATE (military)
+
+```mermaid
+sequenceDiagram
+    participant Mac as Mac (GCS)
+    participant Nucleo as Nucleo (ESAD)
+    Nucleo->>Mac: HEARTBEAT (link + common dialect ok)
+    Mac->>Nucleo: ESAD_ARMING (military)
+    Nucleo->>Mac: ESAD_STATE (military)
 ```
 
 Run it:
@@ -53,22 +57,38 @@ The real target. A GCS on the Mac talks to a PX4 flight controller (an NXP
 and forwards the replies back. PX4 must be built with the military dialect
 compiled in, or the `ESAD_*` messages fail CRC and get silently dropped.
 
-```
-  Mac (GCS)              Tropic (PX4, military dialect)          Nucleo (ESAD)
-  host/gcs_via_px4.py    sys=1                                   sys=2 comp=190
-        |                     |                                        |
-        |  USB CDC            |   TELEM2 (/dev/ttyS4), 57600 8N1       |
-        |  /dev/cu.usbmodem01 |   no flow control                     |
-        +---------------------+----------------------------------------+
-                              |   crossed 3-wire:                      |
-                              |   Tropic TELEM2 TX <---- PA10 (D2, RX) |
-                              |   Tropic TELEM2 RX <---- PA9  (D8, TX) |
-                              |   GND <------------------------- GND   |
+Link topology and the crossed 3-wire TELEM2 connection:
 
-  GCS HEARTBEAT ----> PX4 ----> (marks GCS "seen", enables forward)
-  payload HEARTBEAT <------------------------------- Nucleo (fwd'd in from TELEM2)
-  ESAD_ARMING ------> PX4 -------------------------> Nucleo
-  ESAD_STATE  <------ PX4 <------------------------- Nucleo
+```mermaid
+flowchart LR
+    Mac["Mac (GCS)<br/>host/gcs_via_px4.py<br/>sys=255"]
+    PX4["Tropic (PX4, military dialect)<br/>sys=1"]
+    Nucleo["Nucleo (ESAD)<br/>sys=2 comp=190"]
+    Mac <-->|"USB CDC<br/>/dev/cu.usbmodem01"| PX4
+    PX4 <-->|"TELEM2 (/dev/ttyS4)<br/>57600 8N1, no flow control"| Nucleo
+
+    subgraph wiring["crossed 3-wire TELEM2"]
+        direction LR
+        t_rx["Tropic TELEM2 RX"] -->|from| n_tx["Nucleo PA9 (D8, TX)"]
+        n_rx["Nucleo PA10 (D2, RX)"] -->|from| t_tx["Tropic TELEM2 TX"]
+        t_gnd["Tropic GND"] <--> n_gnd["Nucleo GND"]
+    end
+```
+
+Message flow (PX4 is the router; it forwards each message in both directions):
+
+```mermaid
+sequenceDiagram
+    participant GCS as Mac (GCS)
+    participant PX4 as Tropic (PX4)
+    participant Nucleo as Nucleo (ESAD)
+    GCS->>PX4: HEARTBEAT (marks GCS "seen", enables forward)
+    Nucleo->>PX4: HEARTBEAT (from TELEM2)
+    PX4->>GCS: payload HEARTBEAT forwarded
+    GCS->>PX4: ESAD_ARMING
+    PX4->>Nucleo: ESAD_ARMING forwarded out TELEM2
+    Nucleo->>PX4: ESAD_STATE
+    PX4->>GCS: ESAD_STATE forwarded back
 ```
 
 Run it (after building/flashing both boards and setting the PX4 params, see
