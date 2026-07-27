@@ -31,8 +31,10 @@ try:
 except ImportError:
     sys.exit("military_dialect.py not found. Run ./generate_dialect.sh first.")
 
+import pymavlink_compat
 from pymavlink import mavutil
 
+pymavlink_compat.apply()   # pymavlink instance-message crash in recv_match()
 mavutil.mavlink = mil
 
 PAYLOAD_SYS = 2      # the Nucleo ESAD identifies as system 2

@@ -154,6 +154,10 @@ docs/
 - **[docs/PX4_INTEGRATION.md](docs/PX4_INTEGRATION.md)** — how to add the
   mavlink-military dialect to PX4 on **any** board (not just the Tropic): the
   `.px4board` dialect line, where `military.xml` goes, and the i.MXRT linker fix.
+- **[docs/PX4_CUSTOM_BUILD.md](docs/PX4_CUSTOM_BUILD.md)** — the same thing for a
+  **custom build**: board variants (`.px4board` label merging), any TELEM port,
+  and the runtime forwarding rules that decide whether the parsed messages ever
+  reach your peripheral.
 - **[docs/WIRING.md](docs/WIRING.md)** — the TELEM2 wiring, with the
   D0/D1-vs-D8/D2 pin trap called out.
 - **[docs/PROTOCOL.md](docs/PROTOCOL.md)** — `ESAD_ARMING` / `ESAD_STATE`

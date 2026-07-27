@@ -199,6 +199,15 @@ This is safe under `-fno-exceptions`. It only affects the i.MXRT/ITCM boards; do
 not apply it to STM32 boards, where it is unnecessary and the section layout
 differs.
 
+## Custom builds
+
+Building a board *variant* (a non-default `.px4board` label), targeting a port
+other than TELEM2, or wiring up your own peripheral? See
+**[PX4_CUSTOM_BUILD.md](PX4_CUSTOM_BUILD.md)**. It covers how variant configs
+merge on top of `default.px4board`, the `MAV_<i>_CONFIG` port mapping, and the
+runtime forwarding rules, which decide whether a correctly compiled dialect
+actually reaches your peripheral.
+
 ## Recap
 
 1. `CONFIG_MAVLINK_DIALECT="military"` in the board's `.px4board`.

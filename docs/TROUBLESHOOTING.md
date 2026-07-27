@@ -164,6 +164,24 @@ parse `ESAD_*` (the CRC-extra byte is unknown), so it drops those frames
 silently. Heartbeats still flow, which makes this look like a forwarding problem.
 Rebuild PX4 with the military dialect (see [SETUP.md](SETUP.md#4-build-and-flash-the-tropic-px4-topology-b)).
 
+To tell this apart from a delivery problem without any instrumentation, use the
+`mavlink status` **`Received Messages`** counters: they only count frames that
+parsed. Note the count for your GCS's sysid/compid, send exactly one
+`ESAD_ARMING`, and re-read. If the counter advanced, the dialect is live in the
+running firmware and the problem is downstream (forwarding, flow control, or
+wiring). If it did not, you are running a `common`-only binary.
+
+### Flow control stalling the outbound direction
+
+If `MAV_<i>_FLOW_CTRL` is left on auto (`2`) on a 3-wire link, PX4 can decide
+flow control is on and then wait on a CTS that is never asserted. The symptom is
+**asymmetric**: the payload's frames reach PX4 with `lost: 0`, because that
+direction needs no CTS, while nothing goes back out. `mavlink status` prints
+`flow control: ON|OFF` per instance. Force it off and reboot.
+
+The same asymmetry is produced by a missing or miswired **FC TX to payload RX**
+wire, so check `flow control:` first (free), then the return wire.
+
 ## robust_parsing / junk on connect
 
 **Symptom:** the host script raises `invalid MAVLink prefix` right after opening

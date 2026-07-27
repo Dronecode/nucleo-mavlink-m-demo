@@ -28,7 +28,10 @@ except ImportError:
         "to generate the pymavlink military dialect."
     )
 
+import pymavlink_compat
 from pymavlink import mavutil
+
+pymavlink_compat.apply()   # pymavlink instance-message crash in recv_match()
 
 # Force pymavlink to use our generated military dialect for all encode/decode.
 mavutil.mavlink = mil
