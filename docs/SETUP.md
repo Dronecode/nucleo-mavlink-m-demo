@@ -124,7 +124,7 @@ arduino-cli upload  -b "$FQBN" -p /dev/cu.usbmodem1103 nucleo_mavlink_m
 
 `upload` copies the compiled `.bin` onto the ST-Link mass-storage drive
 (`/Volumes/NOD_F103RB`); the ST-Link flashes it from there. Footprint is about
-15% flash / 9% RAM, so there is plenty of headroom on the 128 KB / 20 KB part.
+15% flash / 10% RAM, so there is plenty of headroom on the 128 KB / 20 KB part.
 
 Verify topology A before wiring anything:
 
