@@ -110,21 +110,59 @@ else
 	WORKDIR="$(mktemp -d)"
 	trap 'rm -rf "$WORKDIR"' EXIT
 	cp "$XML" "$WORKDIR/"
-	python3 - "$WORKDIR" <<-'PY'
-	import os, shutil, sys
-	import pymavlink
-	src = os.path.join(os.path.dirname(pymavlink.__file__),
-	                   "message_definitions", "v1.0")
+	SRC="$(MAVROOT="${MAVROOT:-}" MAVLINK_DEFS="${MAVLINK_DEFS:-}" \
+		python3 - "$HERE" <<-'PY'
+	import os, sys
 	need = ("common.xml", "standard.xml", "minimal.xml")
-	missing = [f for f in need if not os.path.exists(os.path.join(src, f))]
-	if missing:
-	    sys.exit("installed pymavlink is missing bundled definitions: %s"
-	             % ", ".join(missing))
-	for f in need:
-	    shutil.copy(os.path.join(src, f), sys.argv[1])
+	here = sys.argv[1]
+
+	cands = []
+	# Explicit override always wins.
+	if os.environ.get("MAVLINK_DEFS"):
+	    cands.append(os.environ["MAVLINK_DEFS"])
+	if os.environ.get("MAVROOT"):
+	    cands.append(os.path.join(os.environ["MAVROOT"],
+	                              "message_definitions", "v1.0"))
+	# The pip wheel ships them inside the package.
+	try:
+	    import pymavlink
+	    cands.append(os.path.join(os.path.dirname(pymavlink.__file__),
+	                              "message_definitions", "v1.0"))
+	except ImportError:
+	    pass
+	# Distro packages (Debian/Ubuntu python3-pymavlink, ROS) split data files
+	# out of the module tree, so check the usual share/ locations too.
+	for base in (sys.prefix, "/usr", "/usr/local", os.path.expanduser("~/.local")):
+	    for proj in ("pymavlink", "mavlink"):
+	        cands.append(os.path.join(base, "share", proj,
+	                                  "message_definitions", "v1.0"))
+	# A mavlink checkout sitting beside this repo.
+	for rel in ("../../mavlink", "../../../mavlink"):
+	    cands.append(os.path.join(here, rel, "message_definitions", "v1.0"))
+
+	for d in cands:
+	    if all(os.path.exists(os.path.join(d, f)) for f in need):
+	        print(os.path.abspath(d))
+	        break
+	else:
+	    sys.stderr.write(
+	        "could not find common.xml/standard.xml/minimal.xml, which "
+	        "military.xml includes.\n\nSearched:\n"
+	        + "".join("    %s\n" % os.path.abspath(d) for d in cands)
+	        + "\nFix any one of these:\n"
+	          "  * reinstall pymavlink from pip, which bundles them:\n"
+	          "        python3 -m pip install --upgrade --force-reinstall pymavlink\n"
+	          "    (Ubuntu's apt python3-pymavlink strips these data files)\n"
+	          "  * point at a mavlink checkout:\n"
+	          "        git clone https://github.com/mavlink/mavlink\n"
+	          "        MAVLINK_DEFS=mavlink/message_definitions/v1.0 ./generate_dialect.sh\n"
+	          "  * or put military.xml in a directory that already has common.xml\n")
+	    sys.exit(1)
 	PY
+	)"
+	for f in common.xml standard.xml minimal.xml; do cp "$SRC/$f" "$WORKDIR/"; done
 	BUILD_XML="$WORKDIR/$(basename "$XML")"
-	echo "includes:     staged from the installed pymavlink"
+	echo "includes:     $SRC"
 fi
 
 # --------------------------------------------------------------------------- #

@@ -265,6 +265,32 @@ PX4-Autopilot checkout** and additionally required that tree's
 `pymavlink/tools/mavgen.py`, so it could not work on a machine without PX4. If
 your copy still does that, pull.
 
+### "could not find common.xml/standard.xml/minimal.xml"
+
+`military.xml` is not standalone: it `<include>`s `common.xml`, which includes
+`standard.xml` and `minimal.xml`. The generator needs all four.
+
+The pip wheel bundles those three inside the package, which is the normal
+source. **Ubuntu's `apt install python3-pymavlink` strips them**, as do some
+older wheels, so a system-packaged pymavlink can import fine and still fail
+here. `generate_dialect.sh` searches the package, the usual `share/` locations
+distros use, and any sibling `mavlink` checkout, then prints everywhere it
+looked.
+
+Any one of these fixes it:
+
+```sh
+# preferred: a pip pymavlink actually ships the definitions
+python3 -m pip install --upgrade --force-reinstall pymavlink
+
+# or point at a mavlink checkout
+git clone https://github.com/mavlink/mavlink
+MAVLINK_DEFS=mavlink/message_definitions/v1.0 ./generate_dialect.sh /path/to/military.xml
+```
+
+`MAVLINK_DEFS` overrides the search entirely, so it also covers ROS or vendored
+layouts that put the definitions somewhere unusual.
+
 ## Linux: the host scripts work on macOS but not on Ubuntu
 
 **Symptom:** the same board and the same script that pass on a Mac fail on an
