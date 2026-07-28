@@ -63,12 +63,38 @@ cd host
 ./generate_dialect.sh        # writes host/military_dialect.py
 ```
 
-`generate_dialect.sh` defaults `MAVROOT` to the PX4 worktree's mavlink submodule.
-Override it if your checkout is elsewhere:
+**You do not need a PX4 or mavlink checkout for this.** `military.xml` includes
+`common.xml`, which includes `standard.xml` and `minimal.xml`, and the
+`pip install -r requirements.txt` above already ships all three plus the
+`mavgen.py` generator. The only thing you must supply is `military.xml` itself,
+from [Dronecode/mavlink-military](https://github.com/Dronecode/mavlink-military).
+
+Point the script straight at the XML, wherever it lives:
+
+```sh
+./generate_dialect.sh /path/to/military.xml
+# or: MILITARY_XML=/path/to/military.xml ./generate_dialect.sh
+```
+
+With no arguments it searches the usual spots, including a `mavlink-military`
+checkout sitting beside this repo, and prints everywhere it looked if it comes
+up empty:
+
+```sh
+git clone https://github.com/Dronecode/mavlink-military
+cd nucleo-mavlink-m/host && ./generate_dialect.sh
+```
+
+If you *do* have a mavlink checkout carrying `military.xml`, `MAVROOT` still
+works and takes precedence:
 
 ```sh
 MAVROOT=/path/to/PX4-Autopilot/src/modules/mavlink/mavlink ./generate_dialect.sh
 ```
+
+The script prints how many MAVLink-M messages it generated and fails loudly if
+that count is zero, since a wrong `military.xml` otherwise yields a common-only
+dialect that imports fine and then silently drops every ESAD message at runtime.
 
 `host/military_dialect.py` is git-ignored (it is ~2 MB of generated code).
 

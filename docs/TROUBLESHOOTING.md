@@ -230,6 +230,41 @@ boards. Full context, including the before/after linker snippet and which boards
 are affected, in
 [PX4_INTEGRATION.md](PX4_INTEGRATION.md#imxrt-boards-only-r_arm_prel31-link-error).
 
+## military_dialect.py not found
+
+**Symptom:** any host script exits immediately with
+
+```
+military_dialect.py not found. Run ./generate_dialect.sh first.
+```
+
+**Cause:** `host/military_dialect.py` is ~2 MB of generated code and is
+git-ignored, so it is never in a clone. Every fresh checkout has to generate it
+once.
+
+**Fix:** you need `military.xml` from
+[Dronecode/mavlink-military](https://github.com/Dronecode/mavlink-military), and
+nothing else. `pip install -r requirements.txt` already provides the generator
+and the `common`/`standard`/`minimal` dialects that `military.xml` includes, so
+**no PX4 or mavlink checkout is required**.
+
+```sh
+cd host
+python3 -m pip install -r requirements.txt
+./generate_dialect.sh /path/to/military.xml
+```
+
+With no argument the script searches the usual spots (including a
+`mavlink-military` clone beside this repo) and lists everywhere it looked if it
+finds nothing. On success it reports the MAVLink-M message count, and fails if
+that count is zero rather than leaving you a common-only dialect that drops
+every ESAD message later.
+
+Older revisions of `generate_dialect.sh` defaulted to a **sibling
+PX4-Autopilot checkout** and additionally required that tree's
+`pymavlink/tools/mavgen.py`, so it could not work on a machine without PX4. If
+your copy still does that, pull.
+
 ## Linux: the host scripts work on macOS but not on Ubuntu
 
 **Symptom:** the same board and the same script that pass on a Mac fail on an
