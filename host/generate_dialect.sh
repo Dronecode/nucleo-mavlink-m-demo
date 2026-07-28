@@ -19,6 +19,17 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
+# One cleanup for both temporaries; WORKDIR is only created if we have to stage
+# the included dialects.
+WORKDIR=""
+MAVGEN_LOG="$(mktemp)"
+cleanup() {
+	rm -f "$MAVGEN_LOG"
+	[[ -n "$WORKDIR" ]] && rm -rf "$WORKDIR"
+	return 0
+}
+trap cleanup EXIT
+
 # --------------------------------------------------------------------------- #
 # 1. Find military.xml
 # --------------------------------------------------------------------------- #
@@ -67,38 +78,7 @@ XML="$(cd "$(dirname "$XML")" && pwd)/$(basename "$XML")"   # absolutise
 echo "military.xml: $XML"
 
 # --------------------------------------------------------------------------- #
-# 2. Find a mavgen
-# --------------------------------------------------------------------------- #
-# Prefer a mavlink checkout's copy when MAVROOT points at one, else the mavgen.py
-# that pip installs. `which` alone is not enough: `pip install --user` puts it in
-# ~/.local/bin, which is often not on PATH on Ubuntu.
-if [[ -n "${MAVROOT:-}" && -f "$MAVROOT/pymavlink/tools/mavgen.py" ]]; then
-	MAVGEN="$MAVROOT/pymavlink/tools/mavgen.py"
-else
-	MAVGEN="$(python3 - <<-'PY'
-	import os, shutil, sysconfig
-	p = shutil.which("mavgen.py")
-	if not p:
-	    for d in (sysconfig.get_path("scripts"),
-	              os.path.expanduser("~/.local/bin"), "/usr/local/bin"):
-	        c = os.path.join(d, "mavgen.py")
-	        if os.path.exists(c):
-	            p = c
-	            break
-	print(p or "")
-	PY
-	)"
-fi
-
-if [[ -z "$MAVGEN" ]]; then
-	echo "mavgen.py not found. Install the host deps first:" >&2
-	echo "    python3 -m pip install -r $HERE/requirements.txt" >&2
-	exit 1
-fi
-echo "mavgen:       $MAVGEN"
-
-# --------------------------------------------------------------------------- #
-# 3. Make sure the <include>d dialects sit beside military.xml
+# 2. Make sure the <include>d dialects sit beside military.xml
 # --------------------------------------------------------------------------- #
 # mavgen resolves <include> relative to the including file's directory. Inside a
 # mavlink checkout common.xml is already a sibling. A bare military.xml from the
@@ -107,8 +87,7 @@ XMLDIR="$(dirname "$XML")"
 if [[ -f "$XMLDIR/common.xml" ]]; then
 	BUILD_XML="$XML"
 else
-	WORKDIR="$(mktemp -d)"
-	trap 'rm -rf "$WORKDIR"' EXIT
+	WORKDIR="$(mktemp -d)"   # cleaned up by the EXIT trap at the top
 	cp "$XML" "$WORKDIR/"
 	SRC="$(MAVROOT="${MAVROOT:-}" MAVLINK_DEFS="${MAVLINK_DEFS:-}" \
 		python3 - "$HERE" <<-'PY'
@@ -166,10 +145,76 @@ else
 fi
 
 # --------------------------------------------------------------------------- #
+# 3. Find a mavgen, preferring one that matches where the includes came from
+# --------------------------------------------------------------------------- #
+# Version skew is the trap here. mavgen validates the XML against the
+# mavschema.xsd shipped alongside *it*, so an old pip mavgen fed a recent
+# common.xml fails with a wall of
+#   SCHEMAV_ELEMENT_CONTENT: Element 'superseded': This element is not expected
+# because <superseded> was added to common.xml after that schema was cut. So if
+# the definitions came out of a checkout that carries its own mavgen, use that
+# one: a matched pair validates cleanly.
+MAVGEN=""
+if [[ -n "${SRC:-}" ]]; then
+	# $SRC is <root>/message_definitions/v1.0, so <root> is two levels up.
+	SRC_ROOT="$(cd "$SRC/../.." && pwd)"
+	for c in "$SRC_ROOT/pymavlink/tools/mavgen.py" "$SRC_ROOT/tools/mavgen.py"; do
+		[[ -f "$c" ]] && { MAVGEN="$c"; break; }
+	done
+fi
+if [[ -z "$MAVGEN" && -n "${MAVROOT:-}" && -f "$MAVROOT/pymavlink/tools/mavgen.py" ]]; then
+	MAVGEN="$MAVROOT/pymavlink/tools/mavgen.py"
+fi
+if [[ -z "$MAVGEN" ]]; then
+	# `which` alone is not enough: `pip install --user` puts it in ~/.local/bin,
+	# which is frequently not on PATH on Ubuntu.
+	MAVGEN="$(python3 - <<-'PY'
+	import os, shutil, sysconfig
+	p = shutil.which("mavgen.py")
+	if not p:
+	    for d in (sysconfig.get_path("scripts"),
+	              os.path.expanduser("~/.local/bin"), "/usr/local/bin"):
+	        c = os.path.join(d, "mavgen.py")
+	        if os.path.exists(c):
+	            p = c
+	            break
+	print(p or "")
+	PY
+	)"
+fi
+
+if [[ -z "$MAVGEN" ]]; then
+	echo "mavgen.py not found. Install the host deps first:" >&2
+	echo "    python3 -m pip install -r $HERE/requirements.txt" >&2
+	exit 1
+fi
+echo "mavgen:       $MAVGEN"
+
+# --------------------------------------------------------------------------- #
 # 4. Generate, then prove the 53000 block actually made it in
 # --------------------------------------------------------------------------- #
-python3 "$MAVGEN" --lang=Python --wire-protocol=2.0 \
-	--output="$HERE/military_dialect" "$BUILD_XML"
+# Try with validation on. If it fails only because this mavgen's mavschema.xsd
+# predates an element in the XML (the <superseded> case above), retry without
+# validation rather than dead-ending: these XMLs come from upstream, and the
+# real correctness check is the MAVLink-M message count below, which is far more
+# meaningful than XSD conformance.
+if ! python3 "$MAVGEN" --lang=Python --wire-protocol=2.0 \
+		--output="$HERE/military_dialect" "$BUILD_XML" 2>"$MAVGEN_LOG"; then
+	if grep -q "SCHEMAV\|SCHEMASV\|not expected" "$MAVGEN_LOG"; then
+		echo
+		echo "note: XML validation failed, which almost always means this mavgen's"
+		echo "      schema is older than these XML definitions. Retrying without"
+		echo "      validation. To silence this, match the versions:"
+		echo "          python3 -m pip install --upgrade pymavlink"
+		echo
+		python3 "$MAVGEN" --lang=Python --wire-protocol=2.0 --no-validate \
+			--output="$HERE/military_dialect" "$BUILD_XML"
+	else
+		cat "$MAVGEN_LOG" >&2
+		echo "mavgen failed, and not because of XML validation." >&2
+		exit 1
+	fi
+fi
 
 # Without this check a wrong or stale XML yields a common-only dialect that
 # imports fine and then mysteriously drops every ESAD message at runtime.
