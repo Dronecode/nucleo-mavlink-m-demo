@@ -5,11 +5,11 @@ A MAVLink peripheral running on a **Nucleo-F103RB**, speaking the standard
 [Dronecode/mavlink-military](https://github.com/Dronecode/mavlink-military).
 
 The Nucleo stands in for an **ESAD** (an arming/munition device) on the MAVLink
-bus. It emits `HEARTBEAT` and answers `ESAD_ARMING` with `ESAD_STATE`. The point
-of the project is to prove, on real hardware, that the military dialect
-round-trips end to end: both when a host GCS talks to the board directly, and
-when **PX4** sits in the middle as a router forwarding the military messages it
-was compiled to understand.
+bus. It emits `HEARTBEAT` and `ESAD_STATE` at 1 Hz, and answers `ESAD_ARMING`
+immediately with an updated `ESAD_STATE`. The point of the project is to prove,
+on real hardware, that the military dialect round-trips end to end: both when a
+host GCS talks to the board directly, and when **PX4** sits in the middle as a
+router forwarding the military messages it was compiled to understand.
 
 ## The two topologies
 
@@ -119,19 +119,23 @@ PASS: full loop Mac -> PX4 -> Nucleo -> PX4 -> Mac over the military dialect.
 
 - Emits `HEARTBEAT` at 1 Hz (`sys=2`, `comp=190`, `MAV_TYPE_GENERIC`,
   `MAV_AUTOPILOT_INVALID`). Proves the link and the common dialect.
-- On `ESAD_ARMING`, replies `ESAD_STATE` echoing the requested state back as
-  `arming_status`. Proves the military dialect round-trips, RX and TX.
+- Emits the current `ESAD_STATE` at 1 Hz so a GCS can distinguish current
+  Safe, Armed, or Fault state from an offline or stale payload.
+- On `ESAD_ARMING`, immediately replies with an updated `ESAD_STATE` echoing
+  the requested state back as `arming_status`. The immediate response remains
+  in addition to periodic state telemetry and proves the military dialect
+  round-trips, RX and TX.
 - LD2 (PA5) is **solid on when armed, off when disarmed**. Single-colour GPIO
   LED, no RGB.
 
-Footprint is roughly 15% flash / 9% RAM on the F103RB. See
+Footprint is roughly 15% flash / 10% RAM on the F103RB. See
 [docs/PROTOCOL.md](docs/PROTOCOL.md) for the message details.
 
 ## Layout
 
 ```
 nucleo_mavlink_m/            Arduino sketch (compiled with arduino-cli)
-  nucleo_mavlink_m.ino       heartbeat + ESAD echo logic
+  nucleo_mavlink_m.ino       heartbeat + periodic state + ESAD echo logic
   mavlink_config.h           MAVLink build-time trims for the F103
   mavlink/                   generated C headers (military + common + ...)
 host/

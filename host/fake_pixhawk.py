@@ -93,6 +93,11 @@ def main() -> int:
     print(f"  HEARTBEAT ok: sys={m.target_system} comp={m.target_component} "
           f"type={hb.type} autopilot={hb.autopilot}")
 
+    # Periodic ESAD_STATE telemetry may already be buffered. Drain it before
+    # sending so the first matching state below follows this request.
+    while m.recv_match(type="ESAD_STATE", blocking=False) is not None:
+        pass
+
     print(f"sending ESAD_ARMING arming_request={args.arm} (military)...")
     m.mav.esad_arming_send(
         time_usec=int(time.time() * 1e6),
@@ -117,10 +122,9 @@ def main() -> int:
         if msg.arming_status == expected:
             print("PASS: Nucleo echoed the arming request over the military dialect.")
             return 0
-        print(f"WARN: expected arming_status={expected}, got {msg.arming_status}")
-        return 2
+        print(f"  (ignoring arming_status={msg.arming_status}, want {expected})")
 
-    print("FAIL: no ESAD_STATE reply within timeout")
+    print("FAIL: no matching ESAD_STATE reply within timeout")
     return 1
 
 

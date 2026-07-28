@@ -26,7 +26,9 @@ military dialect and does not need it.**
 The Nucleo is deliberately its **own** system (2), not a component under PX4's
 system 1. That way PX4 treats it as a distinct node to forward, rather than
 mistaking it for one of its own components. It emits `HEARTBEAT` at 1 Hz with
-`MAV_TYPE_GENERIC` / `MAV_AUTOPILOT_INVALID` and `MAV_STATE_ACTIVE`.
+`MAV_TYPE_GENERIC` / `MAV_AUTOPILOT_INVALID` and `MAV_STATE_ACTIVE`. It also
+emits `ESAD_STATE` at 1 Hz. The heartbeat proves component presence, while the
+periodic state message proves that the reported ESAD state is current.
 
 ## ESAD_ARMING — 53031 (host → Nucleo)
 
@@ -63,8 +65,10 @@ not because of any address-based routing.
 
 ## ESAD_STATE — 53030 (Nucleo → host)
 
-The telemetry reply. The firmware sends one immediately on receiving
-`ESAD_ARMING`, with `arming_status` echoing the request.
+The ESAD telemetry. The firmware sends the current state at 1 Hz and sends an
+additional state message immediately on receiving `ESAD_ARMING`, with
+`arming_status` echoing the request. A consumer therefore does not need to issue
+an arming command merely to learn whether the ESAD is online, Safe, or Armed.
 
 The MAVLink-M `ESAD_STATE` carries the full store/ESAD status set below. The
 demo firmware populates only the original core fields; the fields added by the
@@ -94,9 +98,9 @@ their defaults and are not exercised here. The host only reads `arming_status`
 | `track_uid`             | uint8_t[16] | Engagement track UID, all-zero if none. *Full-spec field, default.* |
 
 Because `time_usec` is board uptime rather than wall-clock, the host cannot gate
-replies on a wall-clock timestamp. `gcs_via_px4.py` instead drains any buffered
-`ESAD_STATE` before sending a fresh `ESAD_ARMING`, so the reply it matches is
-genuinely the response to that request.
+replies on a wall-clock timestamp. Both host scripts instead drain any buffered
+`ESAD_STATE` before sending a fresh `ESAD_ARMING`, ignore a nonmatching state,
+and wait for the requested state until the deadline.
 
 ### Enums in ESAD_STATE
 
@@ -162,8 +166,9 @@ sequenceDiagram
     participant host
     participant Nucleo
     Nucleo->>host: HEARTBEAT (1 Hz)
+    Nucleo->>host: ESAD_STATE (1 Hz current state)
     host->>Nucleo: ESAD_ARMING (arming_request)
-    Nucleo->>host: ESAD_STATE (arming_status echoes it)
+    Nucleo->>host: ESAD_STATE (immediate updated state)
 ```
 
 Topology B (through PX4) is identical on the wire; PX4 forwards each message in

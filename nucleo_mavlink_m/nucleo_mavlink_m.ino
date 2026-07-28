@@ -7,9 +7,12 @@
 // and the MAVLINK_M_ESAD_* enum names.
 //
 // Behaviour:
-//   - Emits HEARTBEAT at 1 Hz  (common dialect, proves the TX path + link).
+//   - Emits HEARTBEAT at 1 Hz (common dialect, proves the TX path + link).
+//   - Emits ESAD_STATE at 1 Hz so consumers continuously know whether the ESAD
+//     is online and whether its current state is safe, armed, or faulted.
 //   - On receiving ESAD_ARMING (MAVLink-M), replies with ESAD_STATE (MAVLink-M),
-//     echoing the arming request back as the new arming_status.
+//     echoing the arming request back as the new arming_status. This immediate
+//     reply is independent of the periodic state telemetry.
 //   - LD2 (green, PA5) solid on when armed, off when disarmed.
 //
 // Links:
@@ -26,13 +29,15 @@
 //   USART1: TX=PA9 (Arduino D8), RX=PA10 (Arduino D2).
 // Wire it crossed to the Tropic TELEM2: Nucleo PA9(TX)->Tropic RX,
 // Nucleo PA10(RX)->Tropic TX, plus a common GND.
-HardwareSerial FCLink(PA10, PA9);   // (RX, TX)
+Uart FCLink(PA10, PA9);   // (RX, TX)
 static const uint32_t FC_BAUD = 57600;
 
 // ST-Link virtual COM port (USART2, PA2/PA3) -> /dev/cu.usbmodem* on the Mac.
 // Used only as a human-readable debug console now, not for MAVLink.
 #define DBG Serial
 static const uint32_t DBG_BAUD = 115200;
+static const uint32_t HEARTBEAT_INTERVAL_MS = 1000;
+static const uint32_t ESAD_STATE_INTERVAL_MS = 1000;
 
 // This payload's identity on the bus. It is its OWN system, distinct from the
 // autopilot (PX4 is usually system 1), so PX4 routes/forwards it as a separate
@@ -140,6 +145,7 @@ void setup()
 void loop()
 {
 	static uint32_t last_hb = 0;
+	static uint32_t last_esad_state = 0;
 	static mavlink_message_t msg;
 	static mavlink_status_t status;
 
@@ -152,9 +158,14 @@ void loop()
 	}
 
 	uint32_t now = millis();
-	if (now - last_hb >= 1000) {
+	if (now - last_hb >= HEARTBEAT_INTERVAL_MS) {
 		last_hb = now;
 		send_heartbeat();
 		// LED is not touched here: it reflects arming state, not the heartbeat.
+	}
+
+	if (now - last_esad_state >= ESAD_STATE_INTERVAL_MS) {
+		last_esad_state = now;
+		send_esad_state();
 	}
 }
