@@ -230,6 +230,55 @@ boards. Full context, including the before/after linker snippet and which boards
 are affected, in
 [PX4_INTEGRATION.md](PX4_INTEGRATION.md#imxrt-boards-only-r_arm_prel31-link-error).
 
+## Linux: the host scripts work on macOS but not on Ubuntu
+
+**Symptom:** the same board and the same script that pass on a Mac fail on an
+Ubuntu laptop, with no heartbeat, a `MAVError: invalid MAVLink prefix`, or a
+`SerialException` on open.
+
+The board is usually fine. Check the host in this order.
+
+1. **Port name.** macOS names the ST-Link `/dev/cu.usbmodem*`; Linux names it
+   `/dev/ttyACM*`. `fake_pixhawk.py` autodetects, so `--port` is only needed when
+   several boards are attached. `gcs_via_px4.py` still defaults to the macOS
+   `/dev/cu.usbmodem01`, so pass `--port /dev/ttyACM0` there. Confirm what
+   appeared with `dmesg | tail -20 | grep -i tty`.
+2. **ModemManager.** This is the one that makes Linux behave differently from
+   macOS, which has no equivalent. Ubuntu's ModemManager AT-probes every new
+   `/dev/ttyACM*` for roughly 30 seconds, injecting junk into the stream at
+   exactly the moment you connect. Symptoms: works only after waiting ~30 s,
+   works intermittently, or dies immediately on `invalid MAVLink prefix`.
+
+   ```sh
+   systemctl is-active ModemManager
+   sudo systemctl stop ModemManager       # to test
+   sudo systemctl disable ModemManager    # if that was it
+   ```
+
+   `robust_parsing=True` makes the scripts survive the junk rather than raise,
+   but the cleanest fix is to stop ModemManager touching the port at all.
+3. **Permissions.** `/dev/ttyACM0` is group `dialout`. Without membership the
+   open fails outright:
+
+   ```sh
+   groups | grep -q dialout && echo "in dialout" || sudo usermod -aG dialout $USER
+   ```
+
+   Log out and back in for the group change to take effect.
+4. **Baud.** The MAVLink link is **57600**. If the sketch was changed to put
+   MAVLink on `Serial` (USART2, the ST-Link VCP) for a topology-A run, that same
+   port is 115200 in the shipped firmware's debug role. Opening at 115200 yields
+   a plausible-looking byte stream that never parses. See the note in
+   [WIRING.md](WIRING.md).
+
+A quick way to tell a host problem from a board problem: dump raw bytes and look
+for the MAVLink v2 magic. `0xFD` means the board is transmitting correctly and
+the fault is on your side.
+
+```sh
+python3 -c "import serial;print(serial.Serial('/dev/ttyACM0',57600,timeout=3).read(64).hex(' '))"
+```
+
 ## Nucleo flashes but nothing happens
 
 - **Wrong port for upload.** `arduino-cli upload` targets the ST-Link VCP

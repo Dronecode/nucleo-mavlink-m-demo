@@ -7,7 +7,12 @@ Speaks the military dialect (which includes common). It:
   3. Waits for the ESAD_STATE (military) reply and prints the echoed arming_status.
 
 Usage:
-    python3 fake_pixhawk.py [--port /dev/cu.usbmodem1103] [--baud 57600] [--arm 1]
+    python3 fake_pixhawk.py [--port /dev/ttyACM0] [--baud 57600] [--arm 1]
+
+The port is autodetected (macOS `/dev/cu.usbmodem*`, Linux `/dev/ttyACM*`), so
+`--port` is only needed when more than one board is attached. The baud is the
+**MAVLink** baud, 57600. Do not confuse it with the 115200 debug console some
+builds of the sketch put on this same VCP.
 
 The military dialect module is generated on first run from the mavlink submodule
 in the PX4 worktree (see generate_dialect.sh), and dropped next to this file.
@@ -37,18 +42,48 @@ pymavlink_compat.apply()   # pymavlink instance-message crash in recv_match()
 mavutil.mavlink = mil
 
 
+def _autodetect_port() -> str:
+    """First ST-Link / USB CDC port, so one command works on macOS and Linux.
+
+    macOS names the Nucleo's ST-Link `/dev/cu.usbmodem*`, Linux names it
+    `/dev/ttyACM*`. A hardcoded default for either one is simply broken on the
+    other, so probe instead. Returns "" if nothing plausible is attached.
+    """
+    from serial.tools import list_ports
+    for p in list_ports.comports():
+        if "usbmodem" in p.device or "ttyACM" in p.device:
+            return p.device
+    return ""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", default="/dev/cu.usbmodem1103")
+    ap.add_argument("--port", default=None,
+                    help="serial port; default: autodetect the ST-Link VCP")
     ap.add_argument("--baud", type=int, default=57600)
     ap.add_argument("--arm", type=int, default=1, choices=(0, 1),
                     help="arming_request to send: 1=arm, 0=disarm")
     ap.add_argument("--timeout", type=float, default=10.0)
     args = ap.parse_args()
 
-    print(f"opening {args.port} @ {args.baud}")
-    m = mavutil.mavlink_connection(args.port, baud=args.baud, dialect=None)
+    port = args.port or _autodetect_port()
+    if not port:
+        from serial.tools import list_ports
+        print("FAIL: no ST-Link/USB CDC port found. Pass --port explicitly.")
+        print("  ports seen: "
+              + (", ".join(p.device for p in list_ports.comports()) or "(none)"))
+        return 1
+
+    print(f"opening {port} @ {args.baud}")
+    # robust_parsing resyncs past connect-time junk instead of raising
+    # `invalid MAVLink prefix` on the first non-magic byte. It matters more on
+    # Linux than macOS: ModemManager AT-probes a new /dev/ttyACM* for ~30s and
+    # injects exactly that kind of junk. Set on the connection AND on m.mav,
+    # because replacing m.mav below would otherwise drop the flag.
+    m = mavutil.mavlink_connection(port, baud=args.baud, dialect=None,
+                                   robust_parsing=True)
     m.mav = mil.MAVLink(m, srcSystem=255, srcComponent=190)  # GCS identity
+    m.mav.robust_parsing = True
 
     print("waiting for HEARTBEAT from the Nucleo...")
     hb = m.wait_heartbeat(timeout=args.timeout)

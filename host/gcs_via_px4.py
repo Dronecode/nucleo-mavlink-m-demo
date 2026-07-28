@@ -13,7 +13,11 @@ and forward the ESAD messages. This script:
   4. Waits for the payload's ESAD_STATE reply, forwarded back.
 
 Usage:
-    python3 gcs_via_px4.py [--port /dev/cu.usbmodem01] [--baud 57600] [--arm 1]
+    python3 gcs_via_px4.py [--port /dev/ttyACM0] [--baud 57600] [--arm 1]
+
+The flight controller port is autodetected on macOS (`/dev/cu.usbmodem*`) and
+Linux (`/dev/ttyACM*`); it identifies the FC by its USB strings so it does not
+grab the Nucleo's ST-Link by mistake. Pass `--port` to override.
 
 USB CDC ignores the baud value, but PX4's TELEM2 link to the Nucleo must match
 the Nucleo's 57600 8N1 no-flow (set via PX4 params, see README).
@@ -41,18 +45,58 @@ PAYLOAD_SYS = 2      # the Nucleo ESAD identifies as system 2
 PAYLOAD_COMP = 190
 
 
+def _autodetect_fc_port() -> str:
+    """The flight controller's USB CDC port, across macOS and Linux.
+
+    macOS names it `/dev/cu.usbmodem*`, Linux `/dev/ttyACM*`, so a hardcoded
+    default for one is broken on the other. Unlike the Nucleo scripts we must
+    pick the *FC* here, and on a bench both boards are plugged in at once, so
+    identify it rather than taking the first CDC port:
+
+      * PX4 firmware reports itself as e.g. "PX4 FMU v6XRT.x" with vendor
+        "Dronecode Project, Inc." (USB VID 0x3643).
+      * The Nucleo's ST-Link is VID 0x0483 and must never be chosen here.
+
+    Returns "" if nothing plausible is attached.
+    """
+    from serial.tools import list_ports
+    ST_LINK_VID = 0x0483
+    cands = [p for p in list_ports.comports()
+             if "usbmodem" in p.device or "ttyACM" in p.device]
+    for p in cands:
+        blob = f"{p.description or ''} {p.manufacturer or ''} " \
+               f"{p.product or ''}".lower()
+        if p.vid == 0x3643 or "px4" in blob or "pixhawk" in blob:
+            return p.device
+    # Nothing self-identified as PX4: fall back to any CDC port that is not the
+    # ST-Link, so a board with unusual USB strings still works.
+    for p in cands:
+        if p.vid != ST_LINK_VID:
+            return p.device
+    return ""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", default="/dev/cu.usbmodem01")  # the Tropic
+    ap.add_argument("--port", default=None,
+                    help="flight controller serial port; default: autodetect")
     ap.add_argument("--baud", type=int, default=57600)
     ap.add_argument("--arm", type=int, default=1, choices=(0, 1))
     ap.add_argument("--timeout", type=float, default=15.0)
     args = ap.parse_args()
 
-    print(f"opening PX4 at {args.port}")
+    port = args.port or _autodetect_fc_port()
+    if not port:
+        from serial.tools import list_ports
+        print("FAIL: no flight controller port found. Pass --port explicitly.")
+        print("  ports seen: "
+              + (", ".join(p.device for p in list_ports.comports()) or "(none)"))
+        return 1
+
+    print(f"opening PX4 at {port}")
     # robust_parsing resyncs past connect-time junk / partial frames instead of
     # raising on a bad magic byte.
-    m = mavutil.mavlink_connection(args.port, baud=args.baud, dialect=None,
+    m = mavutil.mavlink_connection(port, baud=args.baud, dialect=None,
                                    robust_parsing=True)
     m.mav = mil.MAVLink(m, srcSystem=255, srcComponent=190)  # GCS identity
     m.mav.robust_parsing = True
