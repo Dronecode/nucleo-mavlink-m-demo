@@ -12,27 +12,36 @@
 //     echoing the arming request back as the new arming_status.
 //   - LD2 (green, PA5) solid on when armed, off when disarmed.
 //
-// Links:
-//   - USART1 (PA9 TX / PA10 RX, Arduino D8 / D2): MAVLink to the PX4 flight
-//     controller's TELEM2. Wired crossed, with a common GND. See FCLink below.
-//   - USART2 (PA2/PA3): the ST-Link virtual COM port to the host, used here
-//     only as a debug console (DBG below).
+// Links: MAVLink is served on BOTH of them, always, at 57600 8N1.
+//   - USART1 (PA9 TX / PA10 RX, Arduino D8 / D2): to a flight controller's
+//     TELEM port. Wired crossed, with a common GND. See FCLink below.
+//   - USART2 (PA2/PA3): the ST-Link virtual COM port, i.e. plain USB to a host.
+//
+// There is deliberately no build flag to choose between them. Plug the board
+// into USB and a host GCS works; wire it to a TELEM port and that works too;
+// do both and both work. Earlier revisions put MAVLink on USART1 only and left
+// USB as a text console, which meant the repo's own quick-start
+// (host/fake_pixhawk.py, which talks over USB) could not talk to the firmware
+// the repo told you to flash.
+//
+// Consequently there is no text debug console: interleaving human-readable
+// prints into a MAVLink byte stream is what makes a port hard to parse. Status
+// goes out as MAVLink STATUSTEXT instead, which any GCS decodes.
 
 #include "mavlink_config.h"
 #include "mavlink/military/mavlink.h"
 
-// MAVLink link to the PX4 flight controller (Tropic TELEM2).
-// This is a SEPARATE UART from the ST-Link/Mac console.
+// Link 1: a flight controller's TELEM port, on its own UART.
 //   USART1: TX=PA9 (Arduino D8), RX=PA10 (Arduino D2).
-// Wire it crossed to the Tropic TELEM2: Nucleo PA9(TX)->Tropic RX,
-// Nucleo PA10(RX)->Tropic TX, plus a common GND.
+// Wire it crossed: Nucleo PA9(TX)->FC TELEM RX, Nucleo PA10(RX)->FC TELEM TX,
+// plus a common GND. Unconnected is fine; writes just go nowhere.
 HardwareSerial FCLink(PA10, PA9);   // (RX, TX)
-static const uint32_t FC_BAUD = 57600;
 
-// ST-Link virtual COM port (USART2, PA2/PA3) -> /dev/cu.usbmodem* on the Mac.
-// Used only as a human-readable debug console now, not for MAVLink.
-#define DBG Serial
-static const uint32_t DBG_BAUD = 115200;
+// Link 2: ST-Link virtual COM port (USART2) -> /dev/ttyACM* or /dev/cu.usbmodem*.
+#define USBLink Serial
+
+// Both links run at the same baud so there is one number to remember.
+static const uint32_t LINK_BAUD = 57600;
 
 // This payload's identity on the bus. It is its OWN system, distinct from the
 // autopilot (PX4 is usually system 1), so PX4 routes/forwards it as a separate
@@ -46,10 +55,26 @@ static const uint8_t LED = LED_BUILTIN;
 // Mirror of the last arming request we were told to apply.
 static uint8_t g_arming_status = MAVLINK_M_ESAD_ARMING_DISARMED;
 
+// Serialise a message once and put it on every link. Whoever is listening,
+// on either port, sees the same traffic.
+static void broadcast(const mavlink_message_t *msg)
+{
+	uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+	uint16_t len = mavlink_msg_to_send_buffer(buf, msg);
+	FCLink.write(buf, len);
+	USBLink.write(buf, len);
+}
+
+static void send_statustext(uint8_t severity, const char *text)
+{
+	mavlink_message_t msg;
+	mavlink_msg_statustext_pack(SYS_ID, COMP_ID, &msg, severity, text, 0, 0);
+	broadcast(&msg);
+}
+
 static void send_heartbeat()
 {
 	mavlink_message_t msg;
-	uint8_t buf[MAVLINK_MAX_PACKET_LEN];
 
 	// A generic onboard controller. Not an autopilot: this is a peripheral.
 	mavlink_msg_heartbeat_pack(
@@ -60,14 +85,12 @@ static void send_heartbeat()
 		0,                      // custom_mode
 		MAV_STATE_ACTIVE);
 
-	uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-	FCLink.write(buf, len);
+	broadcast(&msg);
 }
 
 static void send_esad_state()
 {
 	mavlink_message_t msg;
-	uint8_t buf[MAVLINK_MAX_PACKET_LEN];
 	const uint8_t sw_hash[8] = { 'n','u','c','1','0','3','r','b' };
 	// No engagement association on this demo payload: all-zero track UID.
 	const uint8_t track_uid[16] = { 0 };
@@ -92,8 +115,7 @@ static void send_esad_state()
 		MAVLINK_M_ESAD_TRIG_DIST_UNKNOWN, // trigger_distance_mode
 		track_uid);                       // track_uid[16] (all-zero, no track)
 
-	uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-	FCLink.write(buf, len);
+	broadcast(&msg);
 }
 
 static void handle_message(const mavlink_message_t *msg)
@@ -118,9 +140,6 @@ static void handle_message(const mavlink_message_t *msg)
 		// LD2 (green, PA5) tracks arming state: solid on when armed, off when
 		// disarmed. Single-color GPIO LED, no colour control on this board.
 		digitalWrite(LED, g_arming_status == MAVLINK_M_ESAD_ARMING_ARMED ? HIGH : LOW);
-		DBG.print("ESAD_ARMING rx, request=");
-		DBG.print(in.arming_request);
-		DBG.println(" -> replied ESAD_STATE");
 		break;
 	}
 	default:
@@ -132,24 +151,35 @@ static void handle_message(const mavlink_message_t *msg)
 void setup()
 {
 	pinMode(LED, OUTPUT);
-	DBG.begin(DBG_BAUD);       // Mac console (ST-Link VCP)
-	FCLink.begin(FC_BAUD);     // MAVLink to the Tropic (USART1)
-	DBG.println("nucleo esad payload up: HB on USART1 @57600, sys=2 comp=190");
+	FCLink.begin(LINK_BAUD);   // USART1 -> flight controller TELEM
+	USBLink.begin(LINK_BAUD);  // USART2 -> ST-Link VCP -> host
+	send_statustext(MAV_SEVERITY_INFO,
+	                "nucleo esad up: MAVLink on USB + USART1 @57600 sys=2 comp=190");
+}
+
+// Drain one link, feeding its own parser channel a byte at a time. Each link
+// MUST use a distinct channel: the channel selects which mavlink_message_t /
+// mavlink_status_t pair mavlink_parse_char() accumulates into, so sharing one
+// between two interleaved streams corrupts both.
+static void pump(Stream &link, uint8_t chan)
+{
+	mavlink_message_t msg;
+	mavlink_status_t status;
+
+	while (link.available() > 0) {
+		uint8_t c = (uint8_t)link.read();
+		if (mavlink_parse_char(chan, c, &msg, &status)) {
+			handle_message(&msg);
+		}
+	}
 }
 
 void loop()
 {
 	static uint32_t last_hb = 0;
-	static mavlink_message_t msg;
-	static mavlink_status_t status;
 
-	// Drain the FC UART, feeding the incremental parser one byte at a time.
-	while (FCLink.available() > 0) {
-		uint8_t c = (uint8_t)FCLink.read();
-		if (mavlink_parse_char(MAVLINK_COMM_0, c, &msg, &status)) {
-			handle_message(&msg);
-		}
-	}
+	pump(FCLink, MAVLINK_COMM_0);
+	pump(USBLink, MAVLINK_COMM_1);
 
 	uint32_t now = millis();
 	if (now - last_hb >= 1000) {

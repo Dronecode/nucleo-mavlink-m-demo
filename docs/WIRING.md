@@ -17,8 +17,9 @@ HardwareSerial FCLink(PA10, PA9);   // (RX, TX)  -> USART1, Arduino D2 / D8
 #define DBG Serial                  //            -> USART2, ST-Link VCP (debug)
 ```
 
-USART2 stays as a human-readable debug console at 115200 over the ST-Link VCP;
-USART1 carries the MAVLink traffic to the Tropic at 57600.
+Both links carry MAVLink at 57600: USART1 to the flight controller, USART2 out
+the ST-Link USB VCP to a host. The firmware serves both at once, so the wiring
+below is only needed for topology B.
 
 ## The link is crossed (TX ↔ RX)
 
@@ -60,10 +61,10 @@ agree.
 
 ## Topology A (direct) — no wiring
 
-For the direct Mac ↔ Nucleo test (`host/fake_pixhawk.py`), the MAVLink link runs
-over the Nucleo's onboard ST-Link virtual COM port (USART2, PA2/PA3), which
-appears as `/dev/cu.usbmodem1103` on the Mac. No jumper wires, no external
-adapter.
+For the direct host ↔ Nucleo test (`host/fake_pixhawk.py`), MAVLink runs over the
+Nucleo's onboard ST-Link virtual COM port (USART2, PA2/PA3): `/dev/ttyACM*` on
+Linux, `/dev/cu.usbmodem*` on macOS. No jumper wires, no external adapter, and
+the scripts autodetect the port.
 
 Note the firmware as shipped puts the MAVLink link on USART1 for topology B. To
 run topology A over the ST-Link VCP without any wiring, point the sketch's FC

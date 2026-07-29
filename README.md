@@ -44,11 +44,15 @@ cd host
 python3 fake_pixhawk.py --arm 1          # --arm 0 to disarm
 ```
 
-> In topology A the sketch's `Serial` (USART2) is the MAVLink link. In topology
-> B (below) the current firmware moves the MAVLink link to **USART1** and keeps
-> USART2 as a debug console. The firmware as shipped targets topology B; for a
-> pure topology-A run you would point the FC link at `Serial`. See
-> [docs/WIRING.md](docs/WIRING.md).
+> No firmware changes, no build flags, no wiring. The sketch serves MAVLink on
+> **both** the USB VCP and USART1 at once, so the same binary covers topology A
+> and topology B. Plug in USB and this works; wire up TELEM and that works too;
+> do both and both work.
+>
+> Because MAVLink now owns the USB port, there is no text debug console.
+> Status comes back as MAVLink `STATUSTEXT`, which any GCS decodes. Mixing
+> human-readable prints into a MAVLink stream is what makes a port hard to
+> parse.
 
 ### B. Through PX4: Mac ↔ PX4 ↔ Nucleo
 

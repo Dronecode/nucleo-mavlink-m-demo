@@ -8,11 +8,10 @@ Answers, in one pass and without needing the dialect generated:
   * what the board is actually emitting, at every plausible baud
   * whether those bytes are MAVLink v1, MAVLink v2, or a text debug console
 
-The last one matters most. This repo's firmware puts the MAVLink link on
-**USART1** (D8/D2) and leaves the ST-Link USB VCP as a **115200 text debug
-console**. If the sketch was not modified to move MAVLink onto `Serial`, then
-nothing will ever answer MAVLink on the VCP no matter how correct your host
-setup is, and the fix is a firmware change, not a host change.
+The last one matters most. Current firmware serves MAVLink on both the USB VCP
+and USART1, so USB should always answer. If a port yields only text, the board
+is running an **older build** that kept MAVLink on USART1 (D8/D2) and left USB
+as a 115200 text console. No host-side fix helps in that case: reflash.
 
 Run:  python3 diagnose_link.py [--port /dev/ttyACM0]
 """
@@ -113,14 +112,43 @@ def linux_checks(port: str) -> None:
         print("  port not held by another process (as far as /proc shows)")
 
 
+def count_frames(raw: bytes, magic: int) -> int:
+    """Longest run of back-to-back well-formed frames starting at each offset.
+
+    Counting stray magic bytes is not good enough: at the wrong baud, random
+    noise contains 0xFD often enough to look like MAVLink. A real stream has
+    frames whose declared length lands exactly on the next frame's magic byte,
+    so walk the chain and require that to hold.
+    """
+    best = 0
+    for start in range(min(len(raw), 64)):
+        i, n = start, 0
+        while i < len(raw) and raw[i] == magic:
+            if magic == MAVLINK_V2:
+                if i + 12 > len(raw):
+                    break
+                plen, incompat = raw[i + 1], raw[i + 2]
+                total = 12 + plen + (13 if incompat & 0x01 else 0)
+            else:
+                if i + 8 > len(raw):
+                    break
+                total = 8 + raw[i + 1]
+            i += total
+            n += 1
+        best = max(best, n)
+    return best
+
+
 def classify(raw: bytes) -> str:
     if not raw:
         return "silence"
     printable = sum(1 for b in raw if 32 <= b < 127 or b in (9, 10, 13))
     pct = 100 * printable / len(raw)
-    if raw.count(bytes([MAVLINK_V2])) and pct < 60:
+    # Two chained frames is enough to be certain; noise essentially never
+    # produces a length field that lands on another magic byte twice running.
+    if count_frames(raw, MAVLINK_V2) >= 2:
         return "looks like MAVLink v2"
-    if raw.count(bytes([MAVLINK_V1])) and pct < 60:
+    if count_frames(raw, MAVLINK_V1) >= 2:
         return "looks like MAVLink v1"
     if pct > 85:
         return "text (debug console?)"
@@ -198,14 +226,15 @@ def verdict(results: dict, open_errors: list) -> None:
 
     if text:
         print(f"  Only human-readable text found (at {text[0]} baud), no MAVLink.")
-        print("  That is the DEBUG CONSOLE, not the MAVLink link.")
+        print("  That is a text debug console, which current firmware does not have.")
         print()
-        print("  This repo's firmware puts MAVLink on USART1 (D8/D2) and leaves")
-        print("  the USB VCP as a 115200 debug console. Nothing on this port will")
-        print("  ever speak MAVLink until you either:")
-        print("    * change FCLink to `Serial` in nucleo_mavlink_m.ino and reflash")
-        print("      (see docs/WIRING.md, 'Topology A'), or")
-        print("    * attach a USB-serial adapter to D8/D2/GND and open that port.")
+        print("  So this board is running an OLD build: one that kept MAVLink on")
+        print("  USART1 (D8/D2) and left USB as a 115200 console. Nothing you do")
+        print("  host-side will make that port speak MAVLink. Reflash it:")
+        print("      FQBN='STMicroelectronics:stm32:Nucleo_64:pnum=NUCLEO_F103RB'")
+        print("      arduino-cli compile -b \"$FQBN\" nucleo_mavlink_m")
+        print("      arduino-cli upload  -b \"$FQBN\" -p <port> nucleo_mavlink_m")
+        print("  Current firmware serves MAVLink on USB and USART1 at once.")
         return
 
     if anything:

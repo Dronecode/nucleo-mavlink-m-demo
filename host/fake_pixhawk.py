@@ -10,9 +10,9 @@ Usage:
     python3 fake_pixhawk.py [--port /dev/ttyACM0] [--baud 57600] [--arm 1]
 
 The port is autodetected (macOS `/dev/cu.usbmodem*`, Linux `/dev/ttyACM*`), so
-`--port` is only needed when more than one board is attached. The baud is the
-**MAVLink** baud, 57600. Do not confuse it with the 115200 debug console some
-builds of the sketch put on this same VCP.
+`--port` is only needed when more than one board is attached. Both of the
+firmware's links run at 57600. If you find a 115200 text console on this port
+instead, the board is running an old build and needs reflashing.
 
 The military dialect module is generated on first run from the mavlink submodule
 in the PX4 worktree (see generate_dialect.sh), and dropped next to this file.
@@ -90,7 +90,12 @@ def main() -> int:
     if hb is None:
         print("FAIL: no heartbeat (is the sketch flashed and the port right?)")
         return 1
-    print(f"  HEARTBEAT ok: sys={m.target_system} comp={m.target_component} "
+    # Report the heartbeat's own source, not m.target_system. pymavlink only
+    # latches target_system from a heartbeat that passes
+    # probably_vehicle_heartbeat(), which rejects MAV_AUTOPILOT_INVALID, and
+    # this payload is correctly not an autopilot. So target_system stays 0 and
+    # printing it just looks like the board reported system 0.
+    print(f"  HEARTBEAT ok: sys={hb.get_srcSystem()} comp={hb.get_srcComponent()} "
           f"type={hb.type} autopilot={hb.autopilot}")
 
     print(f"sending ESAD_ARMING arming_request={args.arm} (military)...")

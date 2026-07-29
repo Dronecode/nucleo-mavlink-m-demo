@@ -135,11 +135,10 @@ python3 fake_pixhawk.py --arm 1
 
 You should see the `HEARTBEAT`, the `ESAD_STATE` reply, and a `PASS` line.
 
-> As shipped, the firmware puts the MAVLink link on **USART1** (for topology B)
-> and uses **USART2/`Serial`** as a debug console at 115200. For a pure
-> topology-A run over the ST-Link VCP, either wire a USB-serial adapter to
-> USART1, or change `FCLink` in the sketch to `Serial`. See
-> [WIRING.md](WIRING.md).
+> The firmware serves MAVLink on **both** links at 57600: the ST-Link USB VCP
+> (USART2) and USART1 (D8/D2). One binary, no flags, so topology A works
+> straight off USB and topology B works over TELEM without rebuilding. There is
+> no text debug console; status arrives as MAVLink `STATUSTEXT`.
 
 ## 4. Build and flash the Tropic (PX4, topology B)
 

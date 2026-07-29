@@ -43,10 +43,12 @@ GCS through PX4. Work down this list:
    before chasing wiring.
 2. **Wiring: crossed and on the right pins.** The MAVLink link is **USART1**
    (PA9 = D8 = TX, PA10 = D2 = RX), crossed to the Tropic's TELEM2, plus GND.
-   The `D0`/`D1` pins are USART2 (the ST-Link debug port), **not** the FC link —
+   The `D0`/`D1` pins are USART2 (the ST-Link USB port), **not** the FC link —
    wiring there is the classic dead-link mistake. See [WIRING.md](WIRING.md).
-   Confirm the Nucleo is actually transmitting: the debug console (USART2 /
-   ST-Link VCP, 115200) prints `HB tx on USART1, N bytes` once a second.
+   Confirm the Nucleo is alive without touching the wiring at all: plug in its
+   USB and run `python3 fake_pixhawk.py`. The firmware serves MAVLink on USB
+   and USART1 simultaneously, so a board that answers over USB is definitely
+   running, and anything still broken is the TELEM wiring or the PX4 config.
 3. **`MAV_1_CONFIG=102`** so TELEM2 is a MAVLink instance at all.
 4. **`SER_TEL2_BAUD=57600`** matching the Nucleo. A baud mismatch gives silence
    or garbage, never clean frames.
@@ -56,25 +58,26 @@ GCS through PX4. Work down this list:
    by default**. Without it, TELEM2 frames never cross to the USB/GCS link.
 7. **Reboot after `param save`.** These take effect on reboot, not immediately.
 
-Confirm on the Nucleo debug console first (step 2). If the Nucleo is transmitting
-but PX4 still shows nothing, the problem is params/wiring on the PX4 side, not
-the firmware.
+Confirm over the Nucleo's USB first (step 2). If the Nucleo answers there but
+PX4 still shows nothing, the problem is params/wiring on the PX4 side, not the
+firmware.
 
 ## Wrong pins: PX4 receives zero bytes on TELEM2
 
-**Symptom:** the Nucleo is provably transmitting (its debug console prints
-`HB tx on USART1, N bytes` every second), TELEM2 shows up correctly in
+**Symptom:** the Nucleo is provably transmitting (it answers `fake_pixhawk.py`
+over its own USB), TELEM2 shows up correctly in
 `mavlink status` as `/dev/ttyS4` at 57600, yet PX4 receives **zero bytes** on
 TELEM2. Swapping the two data wires makes no difference — still zero bytes in
 **both** orientations.
 
 **Cause:** you are wired to the wrong UART. On the Nucleo-64, the Arduino
-`D0`/`D1` pins are **USART2** (PA3/PA2) — the ST-Link debug port — **not**
-USART1. The firmware's MAVLink link (`FCLink`) is on **USART1**, which is
-**D8 (PA9, TX)** and **D2 (PA10, RX)**. If you land on D0/D1 you are tapping the
-debug console UART, which is not connected to the Tropic, so no orientation of
-the two wires will ever carry a byte. That "dead in both orientations" symptom is
-the tell that it is a wrong-UART problem, not a TX/RX swap.
+`D0`/`D1` pins are **USART2** (PA3/PA2) — the UART already routed to the ST-Link
+USB port — **not** USART1. The firmware's TELEM link (`FCLink`) is **USART1**,
+which is **D8 (PA9, TX)** and **D2 (PA10, RX)**. Landing on D0/D1 taps a UART
+whose pins are being driven toward USB rather than your jumpers, so no
+orientation of the two wires will carry anything useful to the FC. That "dead in
+both orientations" symptom is the tell that it is a wrong-UART problem, not a
+TX/RX swap.
 
 **Fix:** move to USART1 and cross it:
 
@@ -327,10 +330,8 @@ The board is usually fine. Check the host in this order.
 
    Log out and back in for the group change to take effect.
 4. **Baud.** The MAVLink link is **57600**. If the sketch was changed to put
-   MAVLink on `Serial` (USART2, the ST-Link VCP) for a topology-A run, that same
-   port is 115200 in the shipped firmware's debug role. Opening at 115200 yields
-   a plausible-looking byte stream that never parses. See the note in
-   [WIRING.md](WIRING.md).
+   Both of the firmware's links run at 57600. Opening at 115200 yields a
+   plausible-looking byte stream that never parses. See [WIRING.md](WIRING.md).
 
 A quick way to tell a host problem from a board problem: dump raw bytes and look
 for the MAVLink v2 magic. `0xFD` means the board is transmitting correctly and
@@ -346,15 +347,16 @@ python3 -c "import serial;print(serial.Serial('/dev/ttyACM0',57600,timeout=3).re
   (`/dev/cu.usbmodem1103` here), and copies the `.bin` onto the ST-Link
   mass-storage drive (`/Volumes/NOD_F103RB`). If the drive is not mounted, the
   upload cannot complete — re-plug the Nucleo's ST-Link USB.
-- **Nothing on the debug console.** The debug console is USART2 over the ST-Link
-  VCP at **115200** (not 57600 — that is the FC link baud). Open the right port
-  at the right baud.
+- **Nothing on the USB port.** Both links run at **57600**. Current firmware has
+  no 115200 text console; if you find text at 115200 the board is running an old
+  build and needs reflashing.
 
 ## Quick checklist for topology B
 
 This is the sequence that produced a passing run on hardware:
 
-1. Nucleo flashed; debug console prints `HB tx on USART1, N bytes` at 1 Hz.
+1. Nucleo flashed; `python3 fake_pixhawk.py` passes over its own USB, which
+   proves the board and the dialect before any wiring is involved.
 2. TELEM2 wired to USART1 (D8/D2), crossed, with GND. Not D0/D1.
 3. PX4 built with `CONFIG_MAVLINK_DIALECT="military"` + the linker fix.
 4. TELEM2 params set (`MAV_1_CONFIG=102`, `SER_TEL2_BAUD=57600`, `MAV_1_MODE=2`,
